@@ -1,0 +1,12 @@
+name: MultiLayer3
+title: MultiLayer3
+username:
+account: sweco
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 1986386
+bundleId: 3440080
+url: https://sweco.shinyapps.io/MultiLayer3/
+when: 1595837600.10863
+asMultiple: FALSE
+asStatic: FALSE
