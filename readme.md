@@ -12,5 +12,4 @@ https://sweco.shinyapps.io/MultiLayer3/
 - <https://edepot.wur.nl/10123>
 - K. Maas en T. Olsthoorn, 1997. Snelle oudjes gaan Matlab. Stromingen, jaargang 3, nummer 4, blz. 21-42
 
-![screenshot](/images/screenshot.jpg)
-
+![screenshot](screenshot.jpg)
