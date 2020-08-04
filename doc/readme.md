@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Analytic solution of the groundwater flow to a river in direct contact with 1-3 aquifers
 
 ```{r screenshot, echo=FALSE, fig.cap="", out.width = '40%'}
-knitr::include_graphics("www/screenshot.jpg")
+knitr::include_graphics("/images/screenshot.jpg")
 ```
 
 # References
