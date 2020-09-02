@@ -1,7 +1,7 @@
 ---
-title: ""
+title: "MultiLayer3"
 author: "C.H. van Immerzeel"
-date: "24-3-2020"
+date: "9-2-2020"
 #output: 
 #  html_document:
 #    theme: null
@@ -37,3 +37,7 @@ knitr::include_graphics("example_ranges.jpg")
 - <http://grondwaterformules.nl/index.php/formules/meerlagen/waterloop>
 - <https://edepot.wur.nl/10123>
 - K. Maas en T. Olsthoorn, 1997. Snelle oudjes gaan Matlab. Stromingen, jaargang 3, nummer 4, blz. 21-42
+
+# Source code
+
+<https://github.com/KeesVanImmerzeel/MultiLayer3>
