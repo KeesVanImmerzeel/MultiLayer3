@@ -18,6 +18,15 @@ ui <- fluidPage(# Application title
                  sidebarLayout(
                      sidebarPanel(
                        sliderInput(
+                         inputId = "riverlevel",
+                         label = HTML('Rivierlevel (m+ref).'),
+                         min = -5,
+                         max = 5,
+                         value = -0.52,
+                         step = 0.01,
+                         width = '100%'
+                       ),
+                       sliderInput(
                          inputId = "polderlevel",
                          label = "Polderlevel (m+ref).",
                          min = -5,
@@ -26,15 +35,6 @@ ui <- fluidPage(# Application title
                          step = 0.01,
                          width = '100%'
                        ),                       
-                         sliderInput(
-                             inputId = "h0",
-                             label = HTML('Rivierlevel <em>relative to polderlevel</em> (m).'),
-                             min = -5,
-                             max = 5,
-                             value = 1.65,
-                             step = 0.01,
-                             width = '100%'
-                         ),
                          radioButtons(
                              inputId = "n",
                              label = "Nr of aquifers in direct contact with the river",
@@ -132,6 +132,15 @@ ui <- fluidPage(# Application title
         tabPanel(title = "Ranges",
                  sidebarLayout(
                      sidebarPanel(
+                       sliderInput(
+                         "riverlevelrange",
+                         label = "Range riverlevel (m+ref)",
+                         min=-10,
+                         max=10,
+                         value = c(-5, 1),
+                         step = 0.1,
+                         width = '100%'
+                       ), 
                          sliderInput(
                            "polderlevelrange",
                            label = "Range polderlevel (m+ref)",
@@ -424,6 +433,13 @@ server <- function(input, output, session) {
                           "c3range",
                           value = c(df[6, 2], df[6, 4]))
     })
+    
+    observeEvent(input$riverlevelrange, {
+      updateSliderInput(session,
+                        "riverlevel",
+                        min = input$riverlevelrange[1],
+                        max = input$riverlevelrange[2])
+    })     
 
     observeEvent(input$polderlevelrange, {
       updateSliderInput(session,
@@ -517,9 +533,9 @@ server <- function(input, output, session) {
     
     h0 <- reactive({
         if (n_() == m) {
-            rep(input$h0, m) # River is in contact with all aquifers
+            rep( input$riverlevel - input$polderlevel, m) # River is in contact with all aquifers
         } else {
-            stijgh0(A(), p = input$h0, n = n_()) # River is in direct contact with less then rv$m aquifers
+            stijgh0(A(), p = input$riverlevel - input$polderlevel, n = n_()) # River is in direct contact with less then rv$m aquifers
         }
     })
     
@@ -704,15 +720,15 @@ server <- function(input, output, session) {
                                                                 c(xc1[ic1], xc2[ic2], xc3[ic3]))
                                                      h0 <-
                                                          if (n_() == m) {
-                                                             rep(input$h0, m) # River is in contact with all aquifers
+                                                             rep(h0()[1], m) # River is in contact with all aquifers
                                                          } else {
                                                              stijgh0(A,
-                                                                     p = input$h0,
+                                                                     p = h0()[1],
                                                                      n = n_()) # River is in direct contact with less then rv$m aquifers
                                                          }
                                                      sqrtmA <- sqrtm(A)
                                                      e <-
-                                                         err_sum(.data, h0, sqrtmA) / nr_of_observations()
+                                                         err_sum(.data, h0()[1], sqrtmA) / nr_of_observations()
                                                      if (i == 0) {
                                                          min_err <- e
                                                          opt_indx <-
@@ -762,8 +778,8 @@ server <- function(input, output, session) {
     # Combine model and ranges into one data.frame (wide: 1 row, many columns)
     get_all_params <- reactive({
       data.frame(
+        riverlevel  = input$riverlevel,
         polderlevel = input$polderlevel,
-        h0          = input$h0,
         n           = input$n,
         kD1         = input$kD1,
         kD2         = input$kD2,
@@ -776,6 +792,8 @@ server <- function(input, output, session) {
         num_points_x = input$num_points_x,
         
         # Range sliders uit tab 'Ranges'
+        riverlevel_range_min = input$riverlevelrange[1],
+        riverlevel_range_max = input$riverlevelrange[2],        
         polderlevel_range_min = input$polderlevelrange[1],
         polderlevel_range_max = input$polderlevelrange[2],
         kD1_range_min = input$kD1range[1],
@@ -827,7 +845,8 @@ server <- function(input, output, session) {
       adjustRangeAndValue("polderlevel", params$polderlevel, params$polderlevel_range_min, params$polderlevel_range_max)
       
       # Set other individual controls (radioButton, checkbox, etc):
-      updateSliderInput(session, "h0", value = params$h0)
+      updateSliderInput(session, "riverlevel", value = params$riverlevel)
+      updateSliderInput(session, "polderlevel", value = params$polderlevel)
       updateRadioButtons(session, "n", selected = as.character(params$n))
       updateCheckboxInput(session, "logscale_xaxis", value = as.logical(params$logscale_xaxis))
       updateSliderInput(session, "xmax", value = params$xmax)
