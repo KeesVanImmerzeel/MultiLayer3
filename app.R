@@ -7,6 +7,8 @@ library(RColorBrewer)
 library(expm)
 library(magrittr)
 library(ggrepel)
+library(writexl) 
+library(openxlsx)
 
 ui <- fluidPage(# Application title
     #theme = "sweco-bootstrap.scss",
@@ -15,13 +17,22 @@ ui <- fluidPage(# Application title
         tabPanel(title = "Model",
                  sidebarLayout(
                      sidebarPanel(
+                       sliderInput(
+                         inputId = "polderlevel",
+                         label = "Polderlevel (m+ref).",
+                         min = -5,
+                         max = 5,
+                         value = -2.2,
+                         step = 0.01,
+                         width = '100%'
+                       ),                       
                          sliderInput(
                              inputId = "h0",
-                             label = "Rivierlevel relative to polderlevel (m).",
+                             label = HTML('Rivierlevel <em>relative to polderlevel</em> (m).'),
                              min = -5,
                              max = 5,
-                             value = 2.43,
-                             step = 0.05,
+                             value = 1.65,
+                             step = 0.01,
                              width = '100%'
                          ),
                          radioButtons(
@@ -36,7 +47,7 @@ ui <- fluidPage(# Application title
                              min = 100,
                              max = 1000,
                              value = 250,
-                             step = 1,
+                             step = 0.01,
                              width = '100%'
                          ),
                          sliderInput(
@@ -45,7 +56,7 @@ ui <- fluidPage(# Application title
                              min = 100,
                              max = 1000,
                              value = 250,
-                             step = 1,
+                             step = 0.01,
                              width = '100%'
                          ),
                          sliderInput(
@@ -54,7 +65,7 @@ ui <- fluidPage(# Application title
                              min = 100,
                              max = 1000,
                              value = 250,
-                             step = 1,
+                             step = 0.01,
                              width = '100%'
                          ),
                          sliderInput(
@@ -88,15 +99,20 @@ ui <- fluidPage(# Application title
                          sliderInput(
                              inputId = "xmax",
                              label = "x-axis (max value)",
-                             min = 100,
+                             min = 10,
                              max = 10000,
                              value = 4000,
                              step = 10,
                              width = '100%'
-                         ),                         
+                         ),
+                         numericInput("num_points_x", "Number of points in plot:", value = 100, min = 1),
                          conditionalPanel("output.err != ''",
                                           checkboxInput("Labels", "Labels", value = FALSE),
-                                          actionButton("Optimize", "Optimize"))
+                                          actionButton("Optimize", "Optimize")),
+                       downloadButton("downloadData", "Download input data"), br(), br(),
+                       fileInput("uploadData", "Upload input data", accept = ".csv"),
+                       tags$a(href = "https://github.com/KeesVanImmerzeel/MultiLayer3/tree/master", "Documentation")
+                       
                      ),
                      mainPanel(
                          plotOutput("plot"),
@@ -117,30 +133,39 @@ ui <- fluidPage(# Application title
                  sidebarLayout(
                      sidebarPanel(
                          sliderInput(
+                           "polderlevelrange",
+                           label = "Range polderlevel (m+ref)",
+                           min=-10,
+                           max=10,
+                           value = c(-5, 1),
+                           step = 0.1,
+                           width = '100%'
+                         ),                       
+                         sliderInput(
                              "kD1range",
                              label = "Range kD1 (m2/d)",
-                             min = 0.1,
+                             min = 0.01,
                              max = 10000,
                              value = c(100, 1000),
-                             step = 1,
+                             step = 0.01,
                              width = '100%'
                          ),
                          sliderInput(
                              "kD2range",
                              label = "Range kD2 (m2/d)",
-                             min = 0.1,
+                             min = 0.01,
                              max = 10000,
                              value = c(100, 1000),
-                             step = 1,
+                             step = 0.01,
                              width = '100%'
                          ),
                          sliderInput(
                              "kD3range",
                              label = "Range kD3 (m2/d)",
-                             min = 0.1,
+                             min = 0.01,
                              max = 10000,
                              value = c(100, 1000),
-                             step = 1,
+                             step = 0.01,
                              width = '100%'
                          ),
                          sliderInput(
@@ -208,6 +233,20 @@ ui <- fluidPage(# Application title
                      ),
                      mainPanel(tableOutput("ranges"))
                  )),
+        tabPanel(title = "Results",
+                 sidebarLayout(
+                   sidebarPanel(
+                     #h4("Results Options"),  # You can add more controls here
+                     #helpText("This space is for settings or descriptions related to results.")
+                     downloadButton("downloadResultsXLSX", "Download as Excel")
+                   ),
+                   mainPanel(
+                     h4("Output Results "),
+                     verbatimTextOutput("resultsSummary"),  # Use any output type suitable for your results
+                     tableOutput("calculationResults")            # Placeholders for your results table
+                   )
+                 )
+        ),
         tabPanel(title = "Measurements",
                  # Sidebar layout with input and output definitions ----
                  sidebarLayout(
@@ -265,8 +304,8 @@ ui <- fluidPage(# Application title
                      mainPanel(# Output: Data file ----
                                tableOutput("contents"))
                  )),
-        tabPanel(title = "Documentation", 
-                 includeHTML("www/MultiLayer3.html"))
+       # tabPanel(title = "Documentation", 
+      #           includeHTML("www/MultiLayer3.html"))
     ))
 
 server <- function(input, output, session) {
@@ -327,6 +366,19 @@ server <- function(input, output, session) {
 
     rv <- reactiveValues(observations = NULL, ranges = NULL )
     
+    to_wide_model <- function(df) {
+      df$AqNum <- as.integer(gsub("Aq", "", df$Aq))
+      wide <- reshape(
+        df[df$observation == FALSE, c("x", "AqNum", "Head")],
+        timevar = "AqNum",
+        idvar = "x",
+        direction = "wide"
+      )
+      names(wide) <- sub("Head\\.", "Head_L", names(wide))
+      names(wide)[names(wide) == "x"] <- "Distance (m)"
+      wide[order(wide$`Distance (m)`), ]
+    }
+    
     # Upload measurements
     observeEvent(input$file1, {
         req(input$file1)
@@ -355,24 +407,31 @@ server <- function(input, output, session) {
         rv$ranges <- df
         updateSliderInput(session,
                           "kD1range",
-                          value = c(df[1, 1], df[1, 3]))
+                          value = c(df[1, 2], df[1, 4]))
         updateSliderInput(session,
                           "kD2range",
-                          value = c(df[2, 1], df[2, 3]))
+                          value = c(df[2, 2], df[2, 4]))
         updateSliderInput(session,
                           "kD3range",
-                          value = c(df[3, 1], df[3, 3]))
+                          value = c(df[3, 2], df[3, 4]))
         updateSliderInput(session,
                           "c1range",
-                          value = c(df[4, 1], df[4, 3]))
+                          value = c(df[4, 2], df[4, 4]))
         updateSliderInput(session,
                           "c2range",
-                          value = c(df[5, 1], df[5, 3]))
+                          value = c(df[5, 2], df[5, 4]))
         updateSliderInput(session,
                           "c3range",
-                          value = c(df[6, 1], df[6, 3]))
+                          value = c(df[6, 2], df[6, 4]))
     })
 
+    observeEvent(input$polderlevelrange, {
+      updateSliderInput(session,
+                        "polderlevel",
+                        min = input$polderlevelrange[1],
+                        max = input$polderlevelrange[2])
+    })    
+    
     observeEvent(input$kD1range, {
         updateSliderInput(session,
                           "kD1",
@@ -465,16 +524,16 @@ server <- function(input, output, session) {
     })
     
     xmin <- reactive({
-        10
+        0
     })
     xmax <- reactive({
         input$xmax
     })
-    xstep <- reactive({
-        25
-    })
+    #xstep <- reactive({
+    #    25
+    #})
     x <- reactive({
-        seq(xmin(), xmax(), xstep())
+        seq(xmin(), xmax(), length.out = input$num_points_x)
     })
     
     melted_model_data <- reactive({
@@ -492,6 +551,7 @@ server <- function(input, output, session) {
         mmd$observation <- FALSE
         mmd$location <- "model"
         names(mmd)[2] <- c("Head")
+        mmd$Head <-  input$polderlevel + mmd$Head 
         return(mmd)
     })
     
@@ -571,7 +631,7 @@ server <- function(input, output, session) {
                       )) +
             geom_line(
                 data = filter(.data = melted_data(), observation == FALSE),
-                size = 1,
+                linewidth = 1,
                 linetype = "dashed"
             ) +
             scale_colour_manual(values = MyPalette) +
@@ -698,6 +758,153 @@ server <- function(input, output, session) {
                                        "c3",
                                        value = xc3[opt_indx[6]])
                  })
+
+    # Combine model and ranges into one data.frame (wide: 1 row, many columns)
+    get_all_params <- reactive({
+      data.frame(
+        polderlevel = input$polderlevel,
+        h0          = input$h0,
+        n           = input$n,
+        kD1         = input$kD1,
+        kD2         = input$kD2,
+        kD3         = input$kD3,
+        c1          = input$c1,
+        c2          = input$c2,
+        c3          = input$c3,
+        logscale_xaxis = input$logscale_xaxis,
+        xmax        = input$xmax,
+        num_points_x = input$num_points_x,
+        
+        # Range sliders uit tab 'Ranges'
+        polderlevel_range_min = input$polderlevelrange[1],
+        polderlevel_range_max = input$polderlevelrange[2],
+        kD1_range_min = input$kD1range[1],
+        kD1_range_max = input$kD1range[2],
+        kD2_range_min = input$kD2range[1],
+        kD2_range_max = input$kD2range[2],
+        kD3_range_min = input$kD3range[1],
+        kD3_range_max = input$kD3range[2],
+        c1_range_min  = input$c1range[1],
+        c1_range_max  = input$c1range[2],
+        c2_range_min  = input$c2range[1],
+        c2_range_max  = input$c2range[2],
+        c3_range_min  = input$c3range[1],
+        c3_range_max  = input$c3range[2],
+        stringsAsFactors = FALSE
+      )
+    })
+    
+    
+    # Download button handler
+    output$downloadData <- downloadHandler(
+      filename = function() paste0("MultiLayer3_input_data_", Sys.Date(), ".csv"),
+      content = function(file) {
+        write.csv(get_all_params(), file, row.names = FALSE)
+      }
+    )
+    
+    adjustRangeAndValue <- function(param, value, range_min, range_max) {
+      # Update the range slider (Ranges tab)
+      updateSliderInput(session, paste0(param, "range"),
+                        value = c(range_min, range_max))
+      # Update the value slider (Model tab)
+      updateSliderInput(session, param,
+                        min = range_min, max = range_max, value = value)
+    }
+    
+    # Upload logic: restore all UI controls at once
+    observeEvent(input$uploadData, {
+      req(input$uploadData)
+      params <- read.csv(input$uploadData$datapath)
+      
+      # Call the adjust function for each parameter
+      adjustRangeAndValue("kD1", params$kD1, params$kD1_range_min, params$kD1_range_max)
+      adjustRangeAndValue("kD2", params$kD2, params$kD2_range_min, params$kD2_range_max)
+      adjustRangeAndValue("kD3", params$kD3, params$kD3_range_min, params$kD3_range_max)
+      adjustRangeAndValue("c1",  params$c1,  params$c1_range_min,  params$c1_range_max)
+      adjustRangeAndValue("c2",  params$c2,  params$c2_range_min,  params$c2_range_max)
+      adjustRangeAndValue("c3",  params$c3,  params$c3_range_min,  params$c3_range_max)
+      adjustRangeAndValue("polderlevel", params$polderlevel, params$polderlevel_range_min, params$polderlevel_range_max)
+      
+      # Set other individual controls (radioButton, checkbox, etc):
+      updateSliderInput(session, "h0", value = params$h0)
+      updateRadioButtons(session, "n", selected = as.character(params$n))
+      updateCheckboxInput(session, "logscale_xaxis", value = as.logical(params$logscale_xaxis))
+      updateSliderInput(session, "xmax", value = params$xmax)
+      updateNumericInput(session, "num_points_x", value = params$num_points_x)
+    })
+    
+    output$calculationResults <- renderTable({
+      to_wide_model(melted_model_data())
+    })
+    
+   # output$downloadResultsXLSX <- downloadHandler(
+  #    filename = function() {
+  #      paste0("MultiLayer3_results_", Sys.Date(), ".xlsx")
+  #    },
+  #    content = function(file) {
+  #      mmd <- melted_model_data() %>%
+  #        filter(observation == FALSE) %>%
+  #        select(x, Head, Aq)
+  #      mmd$Aquifer <- gsub("^Aq", "", mmd$Aq)
+  #      mmd$Aq <- NULL
+  #      mmd <- mmd %>% select(x, Head, Aquifer)
+  #      colnames(mmd) <- c("Distance (m)", "Head (m+ref)", "Aquifer")
+  #      writexl::write_xlsx(mmd, file)
+  #    }
+  #  )
+    output$downloadResultsXLSX <- downloadHandler(
+      filename = function() {
+        paste0("model_results_", Sys.Date(), ".xlsx")
+      },
+      content = function(file) {
+        # Prepare the data
+        mmd <- melted_model_data() %>%
+          dplyr::filter(observation == FALSE) %>%
+          dplyr::select(x, Head, Aq)
+        mmd$Aquifer <- gsub("^Aq", "", mmd$Aq)
+        mmd$Aq <- NULL
+        mmd <- mmd %>% dplyr::select(x, Head, Aquifer)
+        colnames(mmd) <- c("Distance (m)", "Head (m+ref)", "Aquifer")
+        
+        # Save the plot as a temporary PNG
+        img_file <- tempfile(fileext = ".png")
+        plot_obj <- ggplot(mmd, aes(x = `Distance (m)`, y = `Head (m+ref)`, color = factor(Aquifer))) +
+          geom_line(linewidth = 1) +
+          labs(color = "Aquifer") +
+          theme_minimal()
+        # Save the plot as a temporary PNG with white background
+        ggsave(
+          img_file,
+          plot = plot_obj,
+          width = 7,
+          height = 5,
+          dpi = 150,
+          bg = "white"
+        )
+        
+        wide <- to_wide_model(melted_model_data())
+      
+        # Write to Excel with 'openxlsx'
+        wb <- openxlsx::createWorkbook()
+        openxlsx::addWorksheet(wb, "Results Table")
+        openxlsx::writeData(wb, "Results Table", wide)
+        
+        # Add second worksheet for graph
+        openxlsx::addWorksheet(wb, "Graph")
+        openxlsx::insertImage(
+          wb, 
+          sheet = "Graph", 
+          file = img_file, 
+          startRow = 1, 
+          startCol = 1, 
+          width = 7, height = 5, 
+          units = "in", dpi = 150
+        )
+        
+        openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+      }
+    )
 }
 
 # Run the application

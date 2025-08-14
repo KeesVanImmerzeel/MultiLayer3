@@ -5,8 +5,7 @@ account: sweco
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 1986386
-bundleId: 3583811
+bundleId: 10685289
 url: https://sweco.shinyapps.io/MultiLayer3/
-when: 1599048235.59973
 asMultiple: FALSE
 asStatic: FALSE
