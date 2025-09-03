@@ -1,930 +1,325 @@
 library(shiny)
 library(dplyr)
 library(ggplot2)
-theme_update(text = element_text(size=15))
 library(reshape2)
 library(RColorBrewer)
 library(expm)
-library(magrittr)
 library(ggrepel)
-library(writexl) 
+library(writexl)
 library(openxlsx)
 
-ui <- fluidPage(# Application title
-    #theme = "sweco-bootstrap.scss",
-    titlePanel("MultiLayer3"),
-    tabsetPanel(
-        tabPanel(title = "Model",
-                 sidebarLayout(
-                     sidebarPanel(
-                       sliderInput(
-                         inputId = "riverlevel",
-                         label = HTML('Rivierlevel (m+ref).'),
-                         min = -5,
-                         max = 5,
-                         value = -0.52,
-                         step = 0.01,
-                         width = '100%'
-                       ),
-                       sliderInput(
-                         inputId = "polderlevel",
-                         label = "Polderlevel (m+ref).",
-                         min = -5,
-                         max = 5,
-                         value = -2.2,
-                         step = 0.01,
-                         width = '100%'
-                       ),                       
-                         radioButtons(
-                             inputId = "n",
-                             label = "Nr of aquifers in direct contact with the river",
-                             choices = c(1, 2, 3),
-                             selected = 2
-                         ),
-                         sliderInput(
-                             inputId = "kD1",
-                             label = "kD1 (m2/d):",
-                             min = 100,
-                             max = 1000,
-                             value = 250,
-                             step = 0.01,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             inputId = "kD2",
-                             label = "kD2 (m2/d):",
-                             min = 100,
-                             max = 1000,
-                             value = 250,
-                             step = 0.01,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             inputId = "kD3",
-                             label = "kD3 (m2/d):",
-                             min = 100,
-                             max = 1000,
-                             value = 250,
-                             step = 0.01,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             inputId = "c1",
-                             label = "c1 (d):",
-                             min = 100,
-                             max = 1000,
-                             value = 250,
-                             step = 1,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             inputId = "c2",
-                             label = "c2 (d):",
-                             min = 100,
-                             max = 1000,
-                             value = 250,
-                             step = 1,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             inputId = "c3",
-                             label = "c3 (d):",
-                             min = 100,
-                             max = 1000,
-                             value = 250,
-                             step = 1,
-                             width = '100%'
-                         ),
-                         checkboxInput("logscale_xaxis", "Log scale", value = FALSE),
-                         sliderInput(
-                             inputId = "xmax",
-                             label = "x-axis (max value)",
-                             min = 10,
-                             max = 10000,
-                             value = 4000,
-                             step = 10,
-                             width = '100%'
-                         ),
-                         numericInput("num_points_x", "Number of points in plot:", value = 100, min = 1),
-                         conditionalPanel("output.err != ''",
-                                          checkboxInput("Labels", "Labels", value = FALSE),
-                                          actionButton("Optimize", "Optimize")),
-                       downloadButton("downloadData", "Download input data"), br(), br(),
-                       fileInput("uploadData", "Upload input data", accept = ".csv"),
-                       tags$a(href = "https://github.com/KeesVanImmerzeel/MultiLayer3/tree/master", "Documentation")
-                       
-                     ),
-                     mainPanel(
-                         plotOutput("plot"),
-                         textOutput("err")
-                         #conditionalPanel(
-                         #    condition = "input.plotMeasurements == true",
-                         #    uiOutput("SelectGroup")
-                         #   checkboxGroupInput(
-                         #       "improve",
-                         #       "Adjust these parameters to improve fit:",
-                         #       c("kD1", "kD2", "KD3", "c1", "c2", "c3")
-                         #   ),
-                         #   actionButton("improve", "Improve")
-                         # )
-                     )
-                 )),
-        tabPanel(title = "Ranges",
-                 sidebarLayout(
-                     sidebarPanel(
-                       sliderInput(
-                         "riverlevelrange",
-                         label = "Range riverlevel (m+ref)",
-                         min=-10,
-                         max=10,
-                         value = c(-5, 1),
-                         step = 0.1,
-                         width = '100%'
-                       ), 
-                         sliderInput(
-                           "polderlevelrange",
-                           label = "Range polderlevel (m+ref)",
-                           min=-10,
-                           max=10,
-                           value = c(-5, 1),
-                           step = 0.1,
-                           width = '100%'
-                         ),                       
-                         sliderInput(
-                             "kD1range",
-                             label = "Range kD1 (m2/d)",
-                             min = 0.01,
-                             max = 10000,
-                             value = c(100, 1000),
-                             step = 0.01,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             "kD2range",
-                             label = "Range kD2 (m2/d)",
-                             min = 0.01,
-                             max = 10000,
-                             value = c(100, 1000),
-                             step = 0.01,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             "kD3range",
-                             label = "Range kD3 (m2/d)",
-                             min = 0.01,
-                             max = 10000,
-                             value = c(100, 1000),
-                             step = 0.01,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             "c1range",
-                             label = "Range c1 (d)",
-                             min = 0.1,
-                             max = 10000,
-                             value = c(100, 1000),
-                             step = 1,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             "c2range",
-                             label = "Range c2 (d)",
-                             min = 0.1,
-                             max = 10000,
-                             value = c(100, 1000),
-                             step = 1,
-                             width = '100%'
-                         ),
-                         sliderInput(
-                             "c3range",
-                             label = "Range c3 (d)",
-                             min = 0.1,
-                             max = 10000,
-                             value = c(100, 1000),
-                             step = 1,
-                             width = '100%'
-                         ),
-                         
-                         # Horizontal line ----
-                         tags$hr(),
-                         fileInput(
-                             "file2",
-                             "Choose CSV File with ranges",
-                             multiple = TRUE,
-                             accept = c("text/csv",
-                                        "text/comma-separated-values,text/plain",
-                                        ".csv")
-                         ),
-                         
-                         # Input: Select separator ----
-                         radioButtons(
-                             "sep2",
-                             "Separator",
-                             choices = c(
-                                 Comma = ",",
-                                 Semicolon = ";",
-                                 Tab = "\t"
-                             ),
-                             selected = ";"
-                         ),
-                         
-                         # Input: Select quotes ----
-                         radioButtons(
-                             "quote2",
-                             "Quote",
-                             choices = c(
-                                 None = "",
-                                 "Double Quote" = '"',
-                                 "Single Quote" = "'"
-                             ),
-                             selected = ''
-                         )
-                     ),
-                     mainPanel(tableOutput("ranges"))
-                 )),
-        tabPanel(title = "Results",
-                 sidebarLayout(
-                   sidebarPanel(
-                     #h4("Results Options"),  # You can add more controls here
-                     #helpText("This space is for settings or descriptions related to results.")
-                     downloadButton("downloadResultsXLSX", "Download as Excel")
-                   ),
-                   mainPanel(
-                     h4("Output Results "),
-                     verbatimTextOutput("resultsSummary"),  # Use any output type suitable for your results
-                     tableOutput("calculationResults")            # Placeholders for your results table
-                   )
-                 )
-        ),
-        tabPanel(title = "Measurements",
-                 # Sidebar layout with input and output definitions ----
-                 sidebarLayout(
-                     # Sidebar panel for inputs ----
-                     sidebarPanel(
-                         # Input: Select a file ----
-                         fileInput(
-                             "file1",
-                             "Choose CSV File with measurements",
-                             multiple = TRUE,
-                             accept = c("text/csv",
-                                        "text/comma-separated-values,text/plain",
-                                        ".csv")
-                         ),
-                         # Horizontal line ----
-                         tags$hr(),
-                         # Input: Select separator ----
-                         radioButtons(
-                             "sep",
-                             "Separator",
-                             choices = c(
-                                 Comma = ",",
-                                 Semicolon = ";",
-                                 Tab = "\t"
-                             ),
-                             selected = ";"
-                         ),
-                         
-                         # Input: Select quotes ----
-                         radioButtons(
-                             "quote",
-                             "Quote",
-                             choices = c(
-                                 None = "",
-                                 "Double Quote" = '"',
-                                 "Single Quote" = "'"
-                             ),
-                             selected = ''
-                         ),
-                         
-                         # Horizontal line ----
-                         tags$hr(),
-                         
-                         # Input: Select number of rows to display ----
-                         radioButtons(
-                             "disp",
-                             "Display",
-                             choices = c(Head = "head",
-                                         All = "all"),
-                             selected = "head"
-                         )
-                         
-                     ),
-                     # Main panel for displaying outputs ----
-                     mainPanel(# Output: Data file ----
-                               tableOutput("contents"))
-                 )),
-       # tabPanel(title = "Documentation", 
-      #           includeHTML("www/MultiLayer3.html"))
-    ))
+# ---- Helper Functions ----
 
-server <- function(input, output, session) {
-    m <- 3         # Number of aquifers
-    
-    # Create system matrix from kD and c values
-    sysmat <- function(kD, c) {
-        n <- length(kD)
-        a <- 1 / (kD * c)
-        b <- 1 / (kD * c(c[2:n], Inf))
-        di_a <- rbind(0, cbind(diag(a[2:n]), 0))
-        di_b <- cbind(0, rbind(diag(b[1:(n - 1)]), 0))
-        A <- diag(a + b) - di_a - di_b
-        return(A)
-    }
-    
-    # The function 'stijgh0' calculates the heads at the river (x=0) in aquifers that are not in direct
-    # contact with the sandy river bed.
-    # A = Systeemmatrix (ref. function 'sysmat')
-    # p = Riverlevel relative to polderlevel (m)
-    # n = The number of aquifers that are in direct contact with the river
-    stijgh0 <- function(A, p, n) {
-        A <- sqrtm(A)    # Systeemmatrix
-        m <- max(dim(A)) # Aantal aquifers
-        B3 <- A[(n + 1):m, (1:n)] # submatrix van A
-        B4 <- A[(n + 1):m, (n + 1):m]  # submatrix van A
-        h_bekend <-
-            matrix(data = p, nrow = n) #   stijghoogten in de aangesneden aquifers
-        h_onbekend <- -solve(B4) %*% (B3 %*% h_bekend)
-        h <- c(h_bekend, h_onbekend)
-        return(h)
-    }
-    
-    get_phi <- function(x, h0, sqrtmA) {
-        if ((length(x) == 1) & (length(h0) == 3)) {
-            return(expm::expm(-x * sqrtmA) %*% h0)
-        } else {
-            return(NA)
-        }
-    }
-    
-    # Calculate error = difference between observation (Aq, x, Head) and model (m)
-    err <- function(aquifer, x, Head, h0, sqrtmA) {
-        return(Head - get_phi(x, h0, sqrtmA)[aquifer])
-    }
-    
-    # Calculate sum of absolute errors
-    err_sum <- function(observations, h0, sqrtmA) {
-        apply(observations[, c('aquifer', 'x', 'Head')], 1, function(x)
-            {err(x[1], x[2], x[3], h0, sqrtmA) ^ 2}) %>% sqrt(.) %>% sum(.)
-    }
-    
-    # Define parameter values to be used in optimization 
-    sample_parameter_values <- function( minvalue, maxvalue, nr_of_values ) {
-        x <- seq( log10(minvalue), log10(maxvalue), length.out=nr_of_values )
-        return(10^x)
-    }
+NUM_AQ <- 3
 
-    rv <- reactiveValues(observations = NULL, ranges = NULL )
-    
-    to_wide_model <- function(df) {
-      df$AqNum <- as.integer(gsub("Aq", "", df$Aq))
-      wide <- reshape(
-        df[df$observation == FALSE, c("x", "AqNum", "Head")],
-        timevar = "AqNum",
-        idvar = "x",
-        direction = "wide"
-      )
-      names(wide) <- sub("Head\\.", "Head_L", names(wide))
-      names(wide)[names(wide) == "x"] <- "Distance (m)"
-      wide[order(wide$`Distance (m)`), ]
-    }
-    
-    # Upload measurements
-    observeEvent(input$file1, {
-        req(input$file1)
-        df <- read.csv2(
-            input$file1$datapath,
-            header = TRUE,
-            sep = input$sep,
-            quote = input$quote
-        )
-        df$Aq <-  #for plotting
-            df$aquifer %>% as.character() %>% paste0("Aq", .) #for plotting
-        df$aquifer <- NULL
-        df$observation <- TRUE #for plotting
-        rv$observations <- df
-    })    
-    
-    # Upload ranges
-    observeEvent(input$file2, {
-        req(input$file2)
-        df <- read.csv2(
-            input$file2$datapath,
-            header = TRUE,
-            sep = input$sep2,
-            quote = input$quote2
-        )
-        rv$ranges <- df
-        updateSliderInput(session,
-                          "kD1range",
-                          value = c(df[1, 2], df[1, 4]))
-        updateSliderInput(session,
-                          "kD2range",
-                          value = c(df[2, 2], df[2, 4]))
-        updateSliderInput(session,
-                          "kD3range",
-                          value = c(df[3, 2], df[3, 4]))
-        updateSliderInput(session,
-                          "c1range",
-                          value = c(df[4, 2], df[4, 4]))
-        updateSliderInput(session,
-                          "c2range",
-                          value = c(df[5, 2], df[5, 4]))
-        updateSliderInput(session,
-                          "c3range",
-                          value = c(df[6, 2], df[6, 4]))
-    })
-    
-    observeEvent(input$riverlevelrange, {
-      updateSliderInput(session,
-                        "riverlevel",
-                        min = input$riverlevelrange[1],
-                        max = input$riverlevelrange[2])
-    })     
-
-    observeEvent(input$polderlevelrange, {
-      updateSliderInput(session,
-                        "polderlevel",
-                        min = input$polderlevelrange[1],
-                        max = input$polderlevelrange[2])
-    })    
-    
-    observeEvent(input$kD1range, {
-        updateSliderInput(session,
-                          "kD1",
-                          min = input$kD1range[1],
-                          max = input$kD1range[2],
-                          value= rv$ranges[1,2])
-        
-    })
-    observeEvent(input$kD2range, {
-        updateSliderInput(session,
-                          "kD2",
-                          min = input$kD2range[1],
-                          max = input$kD2range[2],
-                          value= rv$ranges[2,2])
-    })
-    observeEvent(input$kD3range, {
-        updateSliderInput(session,
-                          "kD3",
-                          min = input$kD3range[1],
-                          max = input$kD3range[2],
-                          value= rv$ranges[3,2])
-    })
-
-    observeEvent(input$c1range, {
-        updateSliderInput(session,
-                          "c1",
-                          min = input$c1range[1],
-                          max = input$c1range[2],
-                          value= rv$ranges[4,2])
-    })
-    observeEvent(input$c2range, {
-        updateSliderInput(session,
-                          "c2",
-                          min = input$c2range[1],
-                          max = input$c2range[2],
-                          value= rv$ranges[5,2])
-    })
-    observeEvent(input$c3range, {
-        updateSliderInput(session,
-                          "c3",
-                          min = input$c3range[1],
-                          max = input$c3range[2],
-                          value= rv$ranges[6,2])
-    })
-    
-        
-    output$contents <- renderTable({
-        if (input$disp == "head") {
-            return(head(rv$observations))
-        }
-        else {
-            return(rv$observations)
-        }
-    })
-    
-    output$ranges <- renderTable({
-        rv$ranges
-    })
-    
-    kD <- eventReactive(c(input$kD1,
-                          input$kD2,
-                          input$kD3), {
-                              c(input$kD1, input$kD2, input$kD3) # (m2/d)
-                          })
-    
-    c_ <- eventReactive(c(input$c1,
-                          input$c2,
-                          input$c3), {
-                              c(input$c1, input$c2, input$c3) # (d)
-                          })
-    
-    A <- reactive({
-        sysmat(kD(), c_())
-    })
-    
-    sqrtmA <- reactive({
-        expm::sqrtm(A())
-    })
-    
-    n_ <- eventReactive(input$n, {
-        input$n %>% as.integer()
-    })
-    
-    h0 <- reactive({
-        if (n_() == m) {
-            rep( input$riverlevel - input$polderlevel, m) # River is in contact with all aquifers
-        } else {
-            stijgh0(A(), p = input$riverlevel - input$polderlevel, n = n_()) # River is in direct contact with less then rv$m aquifers
-        }
-    })
-    
-    xmin <- reactive({
-        0
-    })
-    xmax <- reactive({
-        input$xmax
-    })
-    #xstep <- reactive({
-    #    25
-    #})
-    x <- reactive({
-        seq(xmin(), xmax(), length.out = input$num_points_x)
-    })
-    
-    melted_model_data <- reactive({
-        mmd <-
-            sapply(x(), get_phi, h0(), sqrtmA())  %>% t() %>% as.data.frame()
-        names(mmd) <- c("phi1", "phi2", "phi3")
-        mmd$x <- x() %>% as.character()
-        mmd %<>%
-            reshape2::melt(id.vars = c("x"))
-        mmd$x %<>%  as.numeric(.)
-        mmd$Aq <- mmd$variable
-        mmd$variable <- NULL
-        levels(mmd$Aq) <- c("1", "2", "3")
-        mmd$Aq %<>% as.character() %>% paste0("Aq", .)
-        mmd$observation <- FALSE
-        mmd$location <- "model"
-        names(mmd)[2] <- c("Head")
-        mmd$Head <-  input$polderlevel + mmd$Head 
-        return(mmd)
-    })
-    
-    observations_are_available <- reactive({
-        !is.null(rv$observations)
-    })
-    
-    ranges_are_read <- reactive({
-        !is.null(rv$ranges)
-    })
-    
-    nr_of_observations <- reactive({
-        if (observations_are_available()) {
-            nrow(rv$observations)
-        } else {
-            0
-        }
-    })
-    
-    observation_filename <- reactive({
-        if (observations_are_available()) {
-            input$file1[[1]]
-        } else {
-            ""
-        }
-    })
-    
-    graph_title <- reactive({
-        observation_filename() %>% sub(pattern = "(.*?)\\..*$",
-                                       replacement = "\\1",
-                                       basename(.))
-    })
-    
-    melted_data <- reactive({
-        md <- melted_model_data()
-        if (observations_are_available()) {
-            rv$observations <-
-                select(rv$observations, names(md))
-            md <-
-                rbind(md, rv$observations) #Combine observations with model output for plot
-        }
-        md$Aq %<>% as.factor()
-        md$aquifer <- md$Aq %>% as.numeric()
-        return(md)
-    })
-    
-    av_err <- reactive({
-        if (observations_are_available()) {
-            .data <- melted_data() %>% filter(observation == TRUE)
-            err_sum(.data, h0(), sqrtmA()) / nr_of_observations()
-        } else {
-            NULL
-        }
-    })
-    
-    output$err <- renderText({
-        if (observations_are_available()) {
-            paste("Average of absolute error:",
-                  round(av_err(), 2) %>% as.character(),
-                  "(m)")
-        } else {
-            ""
-        }
-    })
-    
-    output$plot <- renderPlot({
-        cbr <- brewer.pal(n = 3, name = 'Set1')
-        MyPalette <-
-            c("Aq1" = cbr[1],
-              "Aq2" = cbr[2],
-              "Aq3" = cbr[3])
-        plt <- ggplot(melted_data(),
-                      aes(
-                          x = x,
-                          y = Head,
-                          colour = Aq
-                      )) +
-            geom_line(
-                data = filter(.data = melted_data(), observation == FALSE),
-                linewidth = 1,
-                linetype = "dashed"
-            ) +
-            scale_colour_manual(values = MyPalette) +
-            xlab("Distance (m)") +
-            ylab("Head (m+ref)") + theme(legend.title = element_blank())
-        
-        if (input$logscale_xaxis) {
-            plt <- plt + scale_x_continuous(trans = 'log10')
-        }
-        
-        if (observations_are_available()) {
-            .data <- melted_data() %>% filter(observation == TRUE)
-            plt <- plt + geom_point(data = .data, size = 3) +
-                ggtitle(graph_title())
-            if (input$Labels) {
-                plt <-
-                    plt + ggrepel::geom_label_repel(
-                        aes(label = ifelse(observation == TRUE, location, "")),
-                        box.padding   = 0.35,
-                        point.padding = 0.5,
-                        segment.color = 'grey50',
-                        show.legend = FALSE
-                    )
-            }
-        }
-        return(plt)
-    })
-    
-    observeEvent(input$Optimize,
-                 {
-                     n <-
-                         5 # Number of sample points per parameter to be used in optimization
-                     xkD1 <-
-                         sample_parameter_values(input$kD1range[1], input$kD1range[2], n)
-                     xkD2 <-
-                         sample_parameter_values(input$kD2range[1], input$kD2range[2], n)
-                     xkD3 <-
-                         sample_parameter_values(input$kD3range[1], input$kD3range[2], n)
-                     xc1 <-
-                         sample_parameter_values(input$c1range[1], input$c1range[2], n)
-                     xc2 <-
-                         sample_parameter_values(input$c2range[1], input$c2range[2], n)
-                     xc3 <-
-                         sample_parameter_values(input$c3range[1], input$c3range[2], n)
-                     
-                     .data <-
-                         melted_data() %>% filter(observation == TRUE)
-                     i <- 0
-                     
-                     j <- 0
-                     
-                     
-                     withProgress(
-                         message = 'Optimizing',
-                         min = 0,
-                         max = n ^ 6,
-                         value = 0,
-                         {
-                             for (ikD1 in (1:n)) {
-                                 for (ikD2 in (1:n)) {
-                                     for (ikD3 in (1:n)) {
-                                         for (ic1 in (1:n)) {
-                                             for (ic2 in (1:n)) {
-                                                 for (ic3 in (1:n)) {
-                                                     j <- j + 1
-                                                     
-                                                     incProgress(1)
-                                                     A <-
-                                                         sysmat(c(xkD1[ikD1], xkD2[ikD2], xkD3[ikD3]),
-                                                                c(xc1[ic1], xc2[ic2], xc3[ic3]))
-                                                     h0 <-
-                                                         if (n_() == m) {
-                                                             rep(h0()[1], m) # River is in contact with all aquifers
-                                                         } else {
-                                                             stijgh0(A,
-                                                                     p = h0()[1],
-                                                                     n = n_()) # River is in direct contact with less then rv$m aquifers
-                                                         }
-                                                     sqrtmA <- sqrtm(A)
-                                                     e <-
-                                                         err_sum(.data, h0()[1], sqrtmA) / nr_of_observations()
-                                                     if (i == 0) {
-                                                         min_err <- e
-                                                         opt_indx <-
-                                                             c(1, 1, 1, 1, 1, 1)
-                                                         i <- i + 1
-                                                     } else {
-                                                         if (e < min_err) {
-                                                             min_err <- e
-                                                             opt_indx <-
-                                                                 c(ikD1,
-                                                                   ikD2,
-                                                                   ikD3,
-                                                                   ic1,
-                                                                   ic2,
-                                                                   ic3)
-                                                         }
-                                                     }
-                                                 }
-                                             }
-                                         }
-                                     }
-                                 }
-                             }
-                             
-                         }
-                     )
-                     updateSliderInput(session,
-                                       "kD1",
-                                       value = xkD1[opt_indx[1]])
-                     updateSliderInput(session,
-                                       "kD2",
-                                       value = xkD2[opt_indx[2]])
-                     updateSliderInput(session,
-                                       "kD3",
-                                       value = xkD3[opt_indx[3]])
-                     updateSliderInput(session,
-                                       "c1",
-                                       value = xc1[opt_indx[4]])
-                     updateSliderInput(session,
-                                       "c2",
-                                       value = xc2[opt_indx[5]])
-                     updateSliderInput(session,
-                                       "c3",
-                                       value = xc3[opt_indx[6]])
-                 })
-
-    # Combine model and ranges into one data.frame (wide: 1 row, many columns)
-    get_all_params <- reactive({
-      data.frame(
-        riverlevel  = input$riverlevel,
-        polderlevel = input$polderlevel,
-        n           = input$n,
-        kD1         = input$kD1,
-        kD2         = input$kD2,
-        kD3         = input$kD3,
-        c1          = input$c1,
-        c2          = input$c2,
-        c3          = input$c3,
-        logscale_xaxis = input$logscale_xaxis,
-        xmax        = input$xmax,
-        num_points_x = input$num_points_x,
-        
-        # Range sliders uit tab 'Ranges'
-        riverlevel_range_min = input$riverlevelrange[1],
-        riverlevel_range_max = input$riverlevelrange[2],        
-        polderlevel_range_min = input$polderlevelrange[1],
-        polderlevel_range_max = input$polderlevelrange[2],
-        kD1_range_min = input$kD1range[1],
-        kD1_range_max = input$kD1range[2],
-        kD2_range_min = input$kD2range[1],
-        kD2_range_max = input$kD2range[2],
-        kD3_range_min = input$kD3range[1],
-        kD3_range_max = input$kD3range[2],
-        c1_range_min  = input$c1range[1],
-        c1_range_max  = input$c1range[2],
-        c2_range_min  = input$c2range[1],
-        c2_range_max  = input$c2range[2],
-        c3_range_min  = input$c3range[1],
-        c3_range_max  = input$c3range[2],
-        stringsAsFactors = FALSE
-      )
-    })
-    
-    
-    # Download button handler
-    output$downloadData <- downloadHandler(
-      filename = function() paste0("MultiLayer3_input_data_", Sys.Date(), ".csv"),
-      content = function(file) {
-        write.csv(get_all_params(), file, row.names = FALSE)
-      }
-    )
-    
-    adjustRangeAndValue <- function(param, value, range_min, range_max) {
-      # Update the range slider (Ranges tab)
-      updateSliderInput(session, paste0(param, "range"),
-                        value = c(range_min, range_max))
-      # Update the value slider (Model tab)
-      updateSliderInput(session, param,
-                        min = range_min, max = range_max, value = value)
-    }
-    
-    # Upload logic: restore all UI controls at once
-    observeEvent(input$uploadData, {
-      req(input$uploadData)
-      params <- read.csv(input$uploadData$datapath)
-      
-      # Call the adjust function for each parameter
-      adjustRangeAndValue("kD1", params$kD1, params$kD1_range_min, params$kD1_range_max)
-      adjustRangeAndValue("kD2", params$kD2, params$kD2_range_min, params$kD2_range_max)
-      adjustRangeAndValue("kD3", params$kD3, params$kD3_range_min, params$kD3_range_max)
-      adjustRangeAndValue("c1",  params$c1,  params$c1_range_min,  params$c1_range_max)
-      adjustRangeAndValue("c2",  params$c2,  params$c2_range_min,  params$c2_range_max)
-      adjustRangeAndValue("c3",  params$c3,  params$c3_range_min,  params$c3_range_max)
-      adjustRangeAndValue("polderlevel", params$polderlevel, params$polderlevel_range_min, params$polderlevel_range_max)
-      
-      # Set other individual controls (radioButton, checkbox, etc):
-      updateSliderInput(session, "riverlevel", value = params$riverlevel)
-      updateSliderInput(session, "polderlevel", value = params$polderlevel)
-      updateRadioButtons(session, "n", selected = as.character(params$n))
-      updateCheckboxInput(session, "logscale_xaxis", value = as.logical(params$logscale_xaxis))
-      updateSliderInput(session, "xmax", value = params$xmax)
-      updateNumericInput(session, "num_points_x", value = params$num_points_x)
-    })
-    
-    output$calculationResults <- renderTable({
-      to_wide_model(melted_model_data())
-    })
-    
-   # output$downloadResultsXLSX <- downloadHandler(
-  #    filename = function() {
-  #      paste0("MultiLayer3_results_", Sys.Date(), ".xlsx")
-  #    },
-  #    content = function(file) {
-  #      mmd <- melted_model_data() %>%
-  #        filter(observation == FALSE) %>%
-  #        select(x, Head, Aq)
-  #      mmd$Aquifer <- gsub("^Aq", "", mmd$Aq)
-  #      mmd$Aq <- NULL
-  #      mmd <- mmd %>% select(x, Head, Aquifer)
-  #      colnames(mmd) <- c("Distance (m)", "Head (m+ref)", "Aquifer")
-  #      writexl::write_xlsx(mmd, file)
-  #    }
-  #  )
-    output$downloadResultsXLSX <- downloadHandler(
-      filename = function() {
-        paste0("model_results_", Sys.Date(), ".xlsx")
-      },
-      content = function(file) {
-        # Prepare the data
-        mmd <- melted_model_data() %>%
-          dplyr::filter(observation == FALSE) %>%
-          dplyr::select(x, Head, Aq)
-        mmd$Aquifer <- gsub("^Aq", "", mmd$Aq)
-        mmd$Aq <- NULL
-        mmd <- mmd %>% dplyr::select(x, Head, Aquifer)
-        colnames(mmd) <- c("Distance (m)", "Head (m+ref)", "Aquifer")
-        
-        # Save the plot as a temporary PNG
-        img_file <- tempfile(fileext = ".png")
-        plot_obj <- ggplot(mmd, aes(x = `Distance (m)`, y = `Head (m+ref)`, color = factor(Aquifer))) +
-          geom_line(linewidth = 1) +
-          labs(color = "Aquifer") +
-          theme_minimal()
-        # Save the plot as a temporary PNG with white background
-        ggsave(
-          img_file,
-          plot = plot_obj,
-          width = 7,
-          height = 5,
-          dpi = 150,
-          bg = "white"
-        )
-        
-        wide <- to_wide_model(melted_model_data())
-      
-        # Write to Excel with 'openxlsx'
-        wb <- openxlsx::createWorkbook()
-        openxlsx::addWorksheet(wb, "Results Table")
-        openxlsx::writeData(wb, "Results Table", wide)
-        
-        # Add second worksheet for graph
-        openxlsx::addWorksheet(wb, "Graph")
-        openxlsx::insertImage(
-          wb, 
-          sheet = "Graph", 
-          file = img_file, 
-          startRow = 1, 
-          startCol = 1, 
-          width = 7, height = 5, 
-          units = "in", dpi = 150
-        )
-        
-        openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
-      }
-    )
+sysmat <- function(kD, c) {
+  n <- length(kD)
+  a <- 1 / (kD * c)
+  b <- 1 / (kD * c(c[2:n], Inf))
+  diag(a + b) - rbind(0, cbind(diag(a[-1]), 0)) - cbind(0, rbind(diag(b[-n]), 0))
 }
 
-# Run the application
+stijgh0 <- function(A, p, n) {
+  sqA <- sqrtm(A)
+  m <- max(dim(A))
+  h_known <- rep(p, n)
+  h_unknown <- -solve(sqA[(n+1):m, (n+1):m]) %*% (sqA[(n+1):m, 1:n] %*% h_known)
+  c(h_known, h_unknown)
+}
+
+get_phi <- function(x, h0, sqrtmA) expm(-x * sqrtmA) %*% h0
+
+err_sum <- function(obs, h0, sqrtmA) {
+  if (is.null(obs) || nrow(obs) == 0) return(NA_real_)
+  apply(obs[, c('aquifer', 'x', 'Head')], 1, function(row)
+    (row[3] - get_phi(row[2], h0, sqrtmA)[as.integer(row[1])])^2) %>%
+    sqrt() %>% sum()
+}
+
+seq_log <- function(minv, maxv, n) 10^(seq(log10(minv), log10(maxv), length.out=n))
+
+to_wide <- function(df) {
+  df %>%
+    filter(!observation) %>%
+    mutate(AqNum = as.integer(gsub("Aq", "", Aq))) %>%
+    select(x, AqNum, Head) %>%
+    tidyr::pivot_wider(names_from = AqNum, names_prefix = "Head_L", values_from = Head) %>%
+    rename(`Distance (m)` = x) %>%
+    arrange(`Distance (m)`)
+}
+
+# ---- UI ----
+
+ui <- fluidPage(
+  titlePanel("MultiLayer3"),
+  tabsetPanel(
+    tabPanel("Model",
+             sidebarLayout(
+               sidebarPanel(
+                 sliderInput("riverlevel", "Rivierlevel (m+ref).", -5, 5, -0.52, 0.01),
+                 sliderInput("polderlevel", "Polderlevel (m+ref).", -5, 5, -2.2, 0.01),
+                 radioButtons("n", "Nr of aquifers in direct contact with the river", c(1, 2, 3), 2),
+                 lapply(c("kD", "c"), function(param)
+                   lapply(1:3, function(i) {
+                     sliderInput(paste0(param, i), paste0(param, i, if (param == "kD") " (m2/d):" else " (d):"),
+                                 100, 1000, 250, if (param == "kD") 0.01 else 1)
+                   })
+                 ),
+                 checkboxInput("logscale_xaxis", "Log scale", FALSE),
+                 sliderInput("xmax", "x-axis (max value)", 10, 10000, 4000, 10),
+                 numericInput("num_points_x", "Number of points in plot:", 100, 1),
+                 conditionalPanel("output.err != ''",
+                                  checkboxInput("Labels", "Labels", FALSE),
+                                  actionButton("Optimize", "Optimize")
+                 ),
+                 downloadButton("downloadData", "Download input data"), br(), br(),
+                 fileInput("uploadData", "Upload input data", accept = ".csv"),
+                 tags$a(href = "https://github.com/KeesVanImmerzeel/MultiLayer3/tree/master", "Documentation")
+               ),
+               mainPanel(plotOutput("plot"), textOutput("err"))
+             )
+    ),
+    tabPanel("Ranges",
+             sidebarLayout(
+               sidebarPanel(
+                 sliderInput("riverlevelrange", "Range riverlevel (m+ref)", -10, 10, c(-5, 1), 0.1),
+                 sliderInput("polderlevelrange", "Range polderlevel (m+ref)", -10, 10, c(-5, 1), 0.1),
+                 lapply(c("kD", "c"), function(param)
+                   lapply(1:3, function(i) {
+                     sliderInput(paste0(param, i, "range"), paste0("Range ", param, i, if (param == "kD") " (m2/d)" else " (d)"),
+                                 0.01, 10000, c(100, 1000), if (param == "kD") 0.01 else 1)
+                   })
+                 ),
+                 tags$hr(),
+                 fileInput("file2", "Choose CSV File with ranges", accept = ".csv"),
+                 radioButtons("sep2", "Separator", c(Comma = ",", Semicolon = ";", Tab = "\t"), ";"),
+                 radioButtons("quote2", "Quote", c(None = "", "Double Quote" = '"', "Single Quote" = "'"), "")
+               ),
+               mainPanel(tableOutput("ranges"))
+             )
+    ),
+    tabPanel("Results",
+             sidebarLayout(
+               sidebarPanel(downloadButton("downloadResultsXLSX", "Download as Excel")),
+               mainPanel(h4("Output Results"), tableOutput("calculationResults"))
+             )
+    ),
+    tabPanel("Measurements",
+             sidebarLayout(
+               sidebarPanel(
+                 fileInput("file1", "Choose CSV File with measurements", accept = ".csv"),
+                 tags$hr(),
+                 radioButtons("sep", "Separator", c(Comma = ",", Semicolon = ";", Tab = "\t"), ";"),
+                 radioButtons("quote", "Quote", c(None = "", "Double Quote" = '"', "Single Quote" = "'"), ""),
+                 tags$hr(),
+                 radioButtons("disp", "Display", c(Head = "head", All = "all"), "head")
+               ),
+               mainPanel(tableOutput("contents"))
+             )
+    )
+  )
+)
+
+# ---- Server ----
+
+server <- function(input, output, session) {
+  rv <- reactiveValues(obs = NULL, ranges = NULL)
+  param_vec <- function(p) sapply(1:3, function(i) input[[paste0(p,i)]])
+  param_range_vec <- function(p) lapply(1:3, function(i) input[[paste0(p,i,"range")]])
+  
+  observeEvent(input$file1, {
+    req(input$file1)
+    df <- read.csv2(input$file1$datapath, header = TRUE, sep = input$sep, quote = input$quote)
+    if (!"Aq" %in% names(df)) df$Aq <- paste0("Aq", df$aquifer)
+    df$observation <- TRUE
+    rv$obs <- df
+  })
+  
+  observeEvent(input$file2, {
+    req(input$file2)
+    df <- read.csv2(input$file2$datapath, header = TRUE, sep = input$sep2, quote = input$quote2)
+    rv$ranges <- df
+    for (i in 1:3) {
+      updateSliderInput(session, paste0("kD", i, "range"), value = c(df[i,2], df[i,4]))
+      updateSliderInput(session, paste0("c", i, "range"), value = c(df[i+3,2], df[i+3,4]))
+    }
+  })
+  
+  observeEvent(input$riverlevelrange, { updateSliderInput(session, "riverlevel", min = input$riverlevelrange[1], max = input$riverlevelrange[2]) })
+  observeEvent(input$polderlevelrange, { updateSliderInput(session, "polderlevel", min = input$polderlevelrange[1], max = input$polderlevelrange[2]) })
+  for (param in c("kD", "c"))
+    for (i in 1:3)
+      observeEvent(input[[paste0(param, i, "range")]], {
+        updateSliderInput(session, paste0(param, i),
+                          min = input[[paste0(param, i, "range")]][1],
+                          max = input[[paste0(param, i, "range")]][2]
+        )
+      })
+  
+  output$contents <- renderTable({ d <- rv$obs; if(is.null(d)) return(); if (input$disp == "head") head(d) else d })
+  output$ranges <- renderTable({ rv$ranges })
+  
+  kD <- reactive(param_vec("kD"))
+  c_ <- reactive(param_vec("c"))
+  n_contact <- reactive(as.integer(input$n))
+  A <- reactive(sysmat(kD(), c_()))
+  sqrt_A <- reactive(sqrtm(A()))
+  
+  h0 <- reactive({
+    if (n_contact() == NUM_AQ) rep(input$riverlevel - input$polderlevel, NUM_AQ)
+    else stijgh0(A(), input$riverlevel - input$polderlevel, n_contact())
+  })
+  xvals <- reactive(seq(0, input$xmax, length.out = input$num_points_x))
+  
+  model_melted <- reactive({
+    mmd <- sapply(xvals(), get_phi, h0(), sqrt_A()) %>% t() %>% as.data.frame()
+    names(mmd) <- c("phi1","phi2","phi3")
+    mmd$x <- xvals()
+    mmd %>%
+      melt(id.vars = "x") %>%
+      mutate(
+        Aq = paste0("Aq", as.integer(sub("phi", "", variable))),
+        Head = input$polderlevel + value,
+        observation = FALSE, location = "model"
+      ) %>%
+      select(x, Head, Aq, observation, location) 
+  })
+  
+  melted_data <- reactive({
+    md <- model_melted()
+    if(!is.null(rv$obs)) {
+      obs <- rv$obs %>% select(names(md))
+      md <- bind_rows(md, obs)
+    }
+    md$Aq <- factor(md$Aq, levels = c("Aq1", "Aq2", "Aq3"))
+    md$aquifer <- as.integer(gsub("Aq", "", md$Aq))
+    md
+  })
+  
+  av_err <- reactive({
+    obs <- melted_data() %>% filter(observation)
+    err_sum(obs, h0(), sqrt_A()) / max(1,nrow(obs))
+  })
+  output$err <- renderText({
+    if(!is.null(rv$obs))
+      paste("Average of absolute error:", round(av_err(),2), "(m)")
+    else ""
+  })
+  
+  output$plot <- renderPlot({
+    pal <- setNames(brewer.pal(3, 'Set1'), paste0("Aq", 1:3))
+    md <- melted_data()
+    p <- ggplot(md, aes(x=x, y=Head, colour=Aq)) +
+      geom_line(data=filter(md, !observation), linewidth=1, linetype="dashed") +
+      scale_colour_manual(values = pal) +
+      xlab("Distance (m)") + ylab("Head (m+ref)") + theme(legend.title=element_blank())
+    if(input$logscale_xaxis) p <- p + scale_x_continuous(trans='log10')
+    if(!is.null(rv$obs)) {
+      p <- p + geom_point(data=filter(md, observation), size=3)
+      if(input$Labels)
+        p <- p + ggrepel::geom_label_repel(
+          aes(label=ifelse(observation, location, "")),
+          box.padding=0.35, point.padding=0.5, segment.color='grey50', show.legend=FALSE
+        )
+    }
+    p
+  })
+  
+  observeEvent(input$Optimize, {
+    n_seq <- 5
+    grid <- expand.grid(
+      kD1=seq_log(input$kD1range[1], input$kD1range[2], n_seq),
+      kD2=seq_log(input$kD2range[1], input$kD2range[2], n_seq),
+      kD3=seq_log(input$kD3range[1], input$kD3range[2], n_seq),
+      c1 =seq_log(input$c1range[1], input$c1range[2], n_seq),
+      c2 =seq_log(input$c2range[1], input$c2range[2], n_seq),
+      c3 =seq_log(input$c3range[1], input$c3range[2], n_seq)
+    )
+    obs <- melted_data() %>% filter(observation)
+    withProgress(message = 'Optimizing', min=0, max = nrow(grid), value=0, {
+      errors <- sapply(seq_len(nrow(grid)), function(i) {
+        incProgress(1)
+        par <- grid[i,]
+        Am <- sysmat(as.numeric(par[1:3]), as.numeric(par[4:6]))
+        h0m <- if (n_contact() == NUM_AQ) rep(h0()[1], NUM_AQ)
+        else stijgh0(Am, h0()[1], n_contact())
+        err_sum(obs, h0m, sqrtm(Am)) / max(1,nrow(obs))
+      })
+      best <- which.min(errors); par <- grid[best,]
+      mapply(function(parname, val) updateSliderInput(session, parname, value=val),
+             parname=c("kD1","kD2","kD3","c1","c2","c3"), val=as.numeric(par)
+      )
+    })
+  })
+  
+  get_all_params <- reactive({
+    as.data.frame(t(c(
+      riverlevel  = input$riverlevel,
+      polderlevel = input$polderlevel,
+      n           = input$n,
+      kD1         = input$kD1, kD2 = input$kD2, kD3 = input$kD3,
+      c1          = input$c1, c2 = input$c2, c3 = input$c3,
+      logscale_xaxis = input$logscale_xaxis,
+      xmax        = input$xmax,
+      num_points_x = input$num_points_x,
+      riverlevel_range_min = input$riverlevelrange[1],
+      riverlevel_range_max = input$riverlevelrange[2],
+      polderlevel_range_min = input$polderlevelrange[1],
+      polderlevel_range_max = input$polderlevelrange[2],
+      kD1_range_min = input$kD1range[1], kD1_range_max = input$kD1range[2],
+      kD2_range_min = input$kD2range[1], kD2_range_max = input$kD2range[2],
+      kD3_range_min = input$kD3range[1], kD3_range_max = input$kD3range[2],
+      c1_range_min = input$c1range[1], c1_range_max = input$c1range[2],
+      c2_range_min = input$c2range[1], c2_range_max = input$c2range[2],
+      c3_range_min = input$c3range[1], c3_range_max = input$c3range[2]
+    )), stringsAsFactors = FALSE)
+  })
+  
+  output$downloadData <- downloadHandler(
+    filename = function() paste0("MultiLayer3_input_data_", Sys.Date(), ".csv"),
+    content = function(file) write.csv(get_all_params(), file, row.names = FALSE)
+  )
+  
+  observeEvent(input$uploadData, {
+    req(input$uploadData)
+    params <- read.csv(input$uploadData$datapath)
+    # Just to match the right fields:
+    paramNames <- c("kD1","kD2","kD3","c1","c2","c3","polderlevel")
+    for (nm in paramNames) {
+      rng <- c(params[[paste0(nm,"_range_min")]], params[[paste0(nm,"_range_max")]])
+      updateSliderInput(session, paste0(nm, "range"), value = rng)
+      updateSliderInput(session, nm, min = rng[1], max = rng[2], value = params[[nm]])
+    }
+    updateSliderInput(session, "riverlevel", value = params$riverlevel)
+    updateRadioButtons(session, "n", selected = as.character(params$n))
+    updateCheckboxInput(session, "logscale_xaxis", value = as.logical(params$logscale_xaxis))
+    updateSliderInput(session, "xmax", value = params$xmax)
+    updateNumericInput(session, "num_points_x", value = params$num_points_x)
+  })
+  
+  output$calculationResults <- renderTable({ to_wide(model_melted()) })
+  
+  output$downloadResultsXLSX <- downloadHandler(
+    filename = function() paste0("model_results_", Sys.Date(), ".xlsx"),
+    content = function(file) {
+      mmd <- model_melted() %>% filter(!observation) %>%
+        mutate(Aquifer = gsub("^Aq", "", Aq)) %>%
+        select(x, Head, Aquifer) %>%
+        rename(`Distance (m)` = x, `Head (m+ref)` = Head)
+      img_file <- tempfile(fileext = ".png")
+      plot_obj <- ggplot(mmd, aes(x = `Distance (m)`, y = `Head (m+ref)`, color = factor(Aquifer))) +
+        geom_line(linewidth = 1) +
+        labs(color = "Aquifer") +
+        theme_minimal()
+      ggsave(img_file, plot = plot_obj, width = 7, height = 5, dpi = 150, bg = "white")
+      wb <- openxlsx::createWorkbook()
+      openxlsx::addWorksheet(wb, "Results Table")
+      openxlsx::writeData(wb, "Results Table", to_wide(model_melted()))
+      openxlsx::addWorksheet(wb, "Graph")
+      openxlsx::insertImage(wb, "Graph", img_file, startRow=1, startCol=1, width=7, height=5, units="in", dpi=150)
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+}
+
 shinyApp(ui = ui, server = server)
